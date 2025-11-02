@@ -1,1 +1,0 @@
-SELECT job_id, MIN(start_time) AS start_ts, MAX(end_time) AS end_ts FROM `clusterdata.jobs` GROUP BY job_id;
