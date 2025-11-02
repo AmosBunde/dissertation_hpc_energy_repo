@@ -1,0 +1,16 @@
+name: hpc-energy
+channels: [conda-forge, defaults]
+dependencies:
+  - python>=3.10
+  - pandas
+  - numpy
+  - scikit-learn
+  - requests
+  - matplotlib
+  - jupyter
+  - nbformat
+  - nbconvert
+  - pip
+  - pip:
+      - pynvml
+      - joblib
