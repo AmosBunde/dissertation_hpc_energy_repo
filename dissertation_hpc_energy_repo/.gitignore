@@ -1,0 +1,23 @@
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Data
+data/raw/
+data/processed/
+traces/*.swf
+!traces/pwa_llnl.swf
+!traces/pwa_kth.swf
+
+# Notebooks
+.ipynb_checkpoints/
+notebooks/*.html
+
+# OS/Editors
+.DS_Store
+*.code-workspace
+
+# Results
+batsim/results_*/
