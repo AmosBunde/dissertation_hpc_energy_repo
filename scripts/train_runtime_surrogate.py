@@ -9,9 +9,9 @@ import joblib
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", required=True)
-    ap.add_argument("--target", required=True)  # e.g., energy_j
+    ap.add_argument("--target", required=True)  # e.g., runtime_s
     ap.add_argument("--n_estimators", type=int, default=300)
-    ap.add_argument("--out", default=None)      # optional custom output path
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
     df = pd.read_csv(args.csv)
