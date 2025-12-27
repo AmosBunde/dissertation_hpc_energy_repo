@@ -1,4 +1,3 @@
-
 # AI-Driven Workload & Energy Optimization for Exascale Scientific Computing
 
 _Dissertation repository for Amos Ochieng’ Bunde (MSc → PhD track)._  
@@ -15,19 +14,23 @@ Core idea: combine **surrogate predictors** (runtime, energy) with a **reinforce
 # 0) Create a virtual env and install deps
 make setup
 
-# 1) Convert an SWF trace (PWA) to CSV jobs table
-python scripts/swf_to_csv.py --swf traces/pwa_llnl.swf --out data/processed/llnl_jobs.csv
+# 1) Get a REAL PWA trace (examples below) and convert to CSV
+mkdir -p traces data/processed
+curl -L -o traces/LLNL-Atlas-2006-2.1-cln.swf.gz   https://www.cs.huji.ac.il/labs/parallel/workload/l_llnl_atlas/LLNL-Atlas-2006-2.1-cln.swf.gz
+gunzip -f traces/LLNL-Atlas-2006-2.1-cln.swf.gz
+
+# Convert SWF → CSV jobs table
+python scripts/swf_to_csv.py --swf traces/LLNL-Atlas-2006-2.1-cln.swf --out data/processed/llnl_jobs.csv
 
 # 2) Build features (clean + leakage-safe) and train both surrogates
 make train
 # (equivalent to: make features && make train-runtime && make train-energy)
 
 # 3) Train a tiny PPO policy on the minimal RL env (proof of wiring)
-make rl-train
+make rl-train       # uses Gymnasium + Stable-Baselines3
 
 # 4) Render the plotting notebook to HTML (queue backlog, energy, CO₂e)
-make plot
-# opens notebooks/plot_report.html on your machine (depending on OS you’ll open it manually)
+make plot           # -> notebooks/plot_report.html
 ```
 
 ---
@@ -57,21 +60,21 @@ SWF trace → swf_to_csv.py → data/processed/*_jobs.csv
 │  ├─ swf_to_csv.py                  # SWF → CSV (jobs)
 │  ├─ build_features.py              # clean + leakage-safe features → runtime/energy feature CSVs
 │  ├─ train_energy_surrogate.py      # trains energy surrogate (RF)
-│  ├─ train_runtime_surrogate.py     # copy of energy trainer, target=runtime_s
+│  ├─ train_runtime_surrogate.py     # trains runtime surrogate (RF)
 │  ├─ nvml_logger.py                 # GPU power (NVML) → CSV (optional)
 │  ├─ rapl_logger.py                 # CPU power (RAPL) → CSV (optional)
 │  └─ carbon_intensity_gb.py         # UK Grid carbon intensity → CSV (optional)
 ├─ rl/
-│  ├─ env.py                         # minimal Gym env that uses the surrogates
-│  └─ train_ppo.py                   # train PPO on env.py (Stable-Baselines3)
+│  ├─ env.py                         # minimal Gymnasium env using surrogates
+│  └─ train_ppo.py                   # train PPO (Stable-Baselines3)
 ├─ batsim/
 │  ├─ platform.xml
 │  ├─ config_llnl.json
 │  ├─ config_kth.json
 │  └─ run_replay.sh                  # placeholder for real batsim invocation
 ├─ traces/
-│  ├─ pwa_llnl.swf  (placeholder – drop real PWA file here)
-│  └─ pwa_kth.swf   (placeholder – drop real PWA file here)
+│  ├─ pwa_llnl.swf  (placeholder — replace with real PWA SWF)
+│  └─ pwa_kth.swf   (placeholder — replace with real PWA SWF)
 ├─ data/
 │  ├─ raw/                           # telemetry, carbon series
 │  └─ processed/                     # *_jobs.csv, *_features.csv
@@ -90,16 +93,51 @@ make setup
 
 Key packages: `pandas`, `numpy`, `scikit-learn`, `joblib`, `matplotlib`, `jupyter`, `stable-baselines3`, `gymnasium`, `pynvml` (optional for NVML logging).
 
+> If you see `ModuleNotFoundError: gym`, we use **Gymnasium**. `make setup` installs it, but you can also run:  
+> `pip install gymnasium stable-baselines3`
+
+---
+
+## Getting real traces (download → convert)
+
+**Note:** `traces/pwa_llnl.swf` and `traces/pwa_kth.swf` in this repo are placeholders. Replace them with real logs from the **Parallel Workloads Archive (PWA)**.
+
+### Examples (copy/paste)
+
+```bash
+mkdir -p traces data/processed
+
+# LLNL Atlas (cleaned)
+curl -L -o traces/LLNL-Atlas-2006-2.1-cln.swf.gz   https://www.cs.huji.ac.il/labs/parallel/workload/l_llnl_atlas/LLNL-Atlas-2006-2.1-cln.swf.gz
+gunzip -f traces/LLNL-Atlas-2006-2.1-cln.swf.gz
+python scripts/swf_to_csv.py --swf traces/LLNL-Atlas-2006-2.1-cln.swf --out data/processed/llnl_jobs.csv
+
+# SDSC SP2 (cleaned)
+curl -L -o traces/SDSC-SP2-1998-4.2-cln.swf.gz   https://www.cs.huji.ac.il/labs/parallel/workload/l_sdsc_sp2/SDSC-SP2-1998-4.2-cln.swf.gz
+gunzip -f traces/SDSC-SP2-1998-4.2-cln.swf.gz
+python scripts/swf_to_csv.py --swf traces/SDSC-SP2-1998-4.2-cln.swf --out data/processed/llnl_jobs.csv
+
+# KTH SP2 (cleaned)
+curl -L -o traces/KTH-SP2-1996-2.1-cln.swf.gz   https://www.cs.huji.ac.il/labs/parallel/workload/l_kth_sp2/KTH-SP2-1996-2.1-cln.swf.gz
+gunzip -f traces/KTH-SP2-1996-2.1-cln.swf.gz
+python scripts/swf_to_csv.py --swf traces/KTH-SP2-1996-2.1-cln.swf --out data/processed/kth_jobs.csv
+```
+
+**Sanity check:**
+```bash
+grep -v '^;' traces/LLNL-Atlas-2006-2.1-cln.swf | sed '/^[[:space:]]*$/d' | head      # preview jobs
+tail -n +2 data/processed/llnl_jobs.csv | wc -l                                      # count rows
+```
+
 ---
 
 ## Step-by-step: From traces to surrogates
 
 ### 1) SWF → jobs table
 ```bash
-python scripts/swf_to_csv.py --swf traces/pwa_llnl.swf --out data/processed/llnl_jobs.csv
+python scripts/swf_to_csv.py --swf traces/LLNL-Atlas-2006-2.1-cln.swf --out data/processed/llnl_jobs.csv
 ```
-
-- Input: `traces/pwa_llnl.swf` (Standard Workload Format from PWA)
+- Input: real `.swf` in `traces/`
 - Output: `data/processed/llnl_jobs.csv` (submit, wait, run, req_procs, …)
 
 ### 2) Clean + leakage-safe features
@@ -110,26 +148,16 @@ Generates:
 - `data/processed/runtime_features.csv` (features + `runtime_s`)
 - `data/processed/energy_features.csv` (features + `energy_j`, synthetic unless you provide labels)
 
-**Leakage-safe** means: inputs are only what’s knowable at scheduling time (e.g., `req_procs`, `age_in_queue_s`, `submit_hour`, `submit_dow`). No post-hoc usage/outcomes in features.
+**Leakage-safe** = only what’s knowable at scheduling time (`req_procs`, `age_in_queue_s`, `submit_hour`, `submit_dow`).
 
 ### 3) Train the surrogates (runtime & energy)
 
-Create a runtime trainer by copying the energy trainer:
-```bash
-cp scripts/train_energy_surrogate.py scripts/train_runtime_surrogate.py
-```
-
-Now train:
-
 ```bash
 # Runtime surrogate (target = runtime_s)
-python scripts/train_runtime_surrogate.py --csv data/processed/runtime_features.csv --target runtime_s
-# → models/runtime_surrogate_rf.joblib
+python scripts/train_runtime_surrogate.py --csv data/processed/runtime_features.csv --target runtime_s --out models/runtime_surrogate_rf.joblib
 
 # Energy surrogate (target = energy_j)
-mkdir -p models
-python scripts/train_energy_surrogate.py --csv data/processed/energy_features.csv --target energy_j
-# → models/energy_surrogate_rf.joblib
+python scripts/train_energy_surrogate.py  --csv data/processed/energy_features.csv  --target energy_j   --out models/energy_surrogate_rf.joblib
 ```
 
 **Shortcut:** do all steps with:
@@ -156,28 +184,24 @@ Carbon intensity (GB example):
 python scripts/carbon_intensity_gb.py --from 2025-01-01 --to 2025-01-07 --out data/raw/carbon_gb.csv
 ```
 
-> Later, you’ll time-align power samples to job start/end to form true `energy_j` labels and retrain the energy surrogate.
+Then align power samples to job windows to produce real `energy_j` labels and retrain the energy surrogate.
 
 ---
 
 ## RL: Training a policy with the surrogates
 
-`rl/env.py` is a **minimal Gym environment** that:
+`rl/env.py` is a **minimal Gymnasium environment** that:
 - Loads `models/runtime_surrogate_rf.joblib` & `models/energy_surrogate_rf.joblib`
 - Observes top-K jobs’ features + backlog
-- Action = pick which job to start next (simple)
-- Reward penalizes **kWh** and backlog
+- Action: pick which job to start next (simple)
+- Reward: penalizes **kWh** and backlog
 
 Train PPO (Stable-Baselines3):
 ```bash
-# Ensure surrogates exist (make train), then:
-make rl-train
-# or faster:
-make rl-train-fast
+make rl-train      # or: make rl-train-fast
 ```
 
-This produces a policy (e.g., `models/ppo_hpcenv.zip`).  
-It’s intentionally small so you can **verify end-to-end** quickly; you’ll later expand actions (power caps/DVFS/placement) and transition dynamics (backfilling, contention, real simulator I/O).
+Output policy: `models/ppo_hpcenv.zip`.
 
 ---
 
@@ -192,7 +216,7 @@ make simulate-KTH
 Render the notebook with plots (queue backlog, energy, CO₂e):
 ```bash
 make plot
-# Produces notebooks/plot_report.html (executed from plot_backlog_energy_co2e.ipynb)
+# Produces notebooks/plot_report.html
 ```
 
 ---
@@ -220,68 +244,38 @@ clean             # tidy artifacts
 
 ## Troubleshooting
 
-- **No `llnl_jobs.csv`**: Run the SWF conversion step first.  
-- **Energy labels missing**: Use `--synthetic-energy` to bootstrap; replace later with real NVML/RAPL integration.  
-- **RL install errors**: Ensure `stable-baselines3` and `gymnasium` installed (`make setup`).  
-- **Notebook render takes long**: It’s executed headless; adjust `ExecutePreprocessor.timeout` in the Makefile if needed.
+- **CSV empty (only header):** The SWF was a placeholder or only comments. Use a real PWA file and reconvert.  
+- **`No rule to make target 'setup'`:** Run from repo root where `Makefile` lives.  
+- **`ModuleNotFoundError: gym`**: We use **Gymnasium**. Ensure `pip install gymnasium stable-baselines3` or run `make setup` again.  
+- **Notebook not found**: Ensure `notebooks/plot_backlog_energy_co2e.ipynb` exists (it’s included).  
+- **Slow/timeout on plot**: Increase `ExecutePreprocessor.timeout` in the `Makefile` `plot` target.
 
 ---
 
 ## Appendix: Terminology & Concepts
 
-**SWF (Standard Workload Format)**  
-Plain-text format for HPC job logs; each line is one job with fields like submit time, wait time, run time, and allocated/requested processors.
-
-**Surrogate Predictors**  
-Fast supervised models that approximate hard-to-measure or expensive outcomes (e.g., runtime, energy). Trained once from historical data (or telemetry) and queried many times during policy search or what-if analysis.
-
-**RL (Reinforcement Learning)**  
-A learning paradigm for sequential decision-making: an agent observes state, takes actions, and receives rewards. Here, actions include selecting jobs and (later) power caps/placement; rewards penalize energy/CO₂e and SLA violations.
-
-**PPO (Proximal Policy Optimization)**  
-A stable, widely used policy-gradient RL algorithm. Good default for discrete/continuous control—used here to train the scheduler policy.
-
-**Gymnasium (Gym)**  
-Common interface for RL environments (obs/action spaces, `step`, `reset`). Lets you plug your problem into many RL libraries quickly.
-
-**NVML (NVIDIA Management Library)**  
-API to read GPU telemetry (power, utilization, temperature). We use it to collect power data for energy labels.
-
-**RAPL (Running Average Power Limit)**  
-Intel interface to read energy counters (package/DRAM) and apply power limits on CPUs. Used to estimate CPU power/energy during job runs.
-
-**DVFS (Dynamic Voltage and Frequency Scaling)**  
-Technique to adjust frequency/voltage (and indirectly power) of CPU/GPU devices; key control knob for energy savings in schedulers.
-
-**Power Cap**  
-Upper bound on device or node power; schedulers can set this to meet energy or thermal budgets (or to shift compute to low-carbon windows).
-
-**kWh / Joule**  
-Energy units. 1 kWh = 3.6e6 Joules. Our surrogate predicts **J**; we convert to **kWh**.
-
-**CO₂e (Carbon Dioxide Equivalent)**  
-Emissions metric. We compute: `kWh × carbon_intensity (gCO2/kWh)` → grams, then convert to kg or tons.
-
-**Backfilling**  
-Scheduling technique that fills idle slots with smaller jobs while preserving reservations for large jobs; improves utilization/throughput.
-
-**SLA / SLO (Service-Level Agreement / Objective)**  
-User-facing performance targets (e.g., p95 wait time). Our reward can penalize violations.
-
-**MAPE / MAE (Error metrics)**  
-Model evaluation metrics for surrogate predictors (runtime/energy). MAPE: mean absolute percentage error; MAE: mean absolute error.
-
-**Explainability (e.g., SHAP)**  
-Tools that attribute predictions (or policy choices) to features; helps operators trust and tune the AI-assisted scheduler.
-
-**k-Anonymity**  
-Privacy technique to ensure any data point is indistinguishable from at least k-1 others. We report aggregates and review with data providers.
+**SWF (Standard Workload Format)** — HPC job logs; one job per line with submit, wait, run, allocated/requested processors.  
+**Surrogate Predictors** — fast supervised models approximating runtime/energy so the scheduler can do “what-if” planning.  
+**RL (Reinforcement Learning)** — learn scheduling decisions from reward signals over time.  
+**PPO (Proximal Policy Optimization)** — robust policy-gradient algorithm used here.  
+**Gymnasium** — RL environment API used by Stable-Baselines3.  
+**NVML (NVIDIA Management Library)** — GPU telemetry (incl. power) for real energy labels.  
+**RAPL (Running Average Power Limit)** — CPU energy counters/limits on Intel platforms.  
+**DVFS** — adjust device frequency/voltage to save power.  
+**Power Cap** — set a device/node power ceiling to meet energy/carbon budgets.  
+**kWh / Joule** — energy units; 1 kWh = 3.6e6 J.  
+**CO₂e** — emissions; computed from energy × grid carbon intensity.  
+**Backfilling** — fill idle gaps with smaller jobs while preserving reservations.  
+**SLA/SLO** — user-facing time/throughput objectives; the policy respects these.  
+**MAPE/MAE** — model error metrics; used to evaluate surrogates.  
+**Explainability (e.g., SHAP)** — understand predictions or policy decisions for operator trust.  
+**k-Anonymity** — privacy; ensure aggregated/blurred telemetry where required.
 
 ---
 
 ## Ethics & Data Handling (summary)
 
-- All IDs (user/project/node) consistently **hashed**.  
-- Telemetry shared at **aggregated** cadence when needed (1–60s).  
-- Confidential results sent back to providers; public outputs pre-reviewed.  
-- See `docs/ethics_and_privility.md` for full policy.
+- IDs (user/project/node) are **hashed**.  
+- Telemetry is **aggregated** (1–60s) when shared.  
+- Results sent back to providers; public artifacts reviewed for privacy.  
+- See `docs/ethics_and_privility.md` for details.
