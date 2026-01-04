@@ -3,11 +3,14 @@ PYTHON := $(VENV)/bin/python
 
 .PHONY: rl-train rl-train-fast eval
 
+# Cap BLAS threads to avoid oversubscription
+ENVVARS = OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONPATH=.
+
 rl-train:
-	$(PYTHON) -m rl.train_ppo --jobs data/processed/llnl_jobs.csv --timesteps 200000
+	$(ENVVARS) $(PYTHON) -m rl.train_ppo --jobs data/processed/llnl_jobs.csv --timesteps 300000 --n_envs 2
 
 rl-train-fast:
-	$(PYTHON) -m rl.train_ppo --jobs data/processed/llnl_jobs.csv --timesteps 20000
+	$(ENVVARS) $(PYTHON) -m rl.train_ppo --jobs data/processed/llnl_jobs.csv --timesteps 20000 --n_envs 1
 
 eval:
-	$(PYTHON) scripts/eval_policy.py --jobs data/processed/llnl_jobs.csv --episodes 5
+	$(ENVVARS) $(PYTHON) -m scripts.eval_policy --jobs data/processed/llnl_jobs.csv --episodes 5

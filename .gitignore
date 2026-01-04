@@ -21,3 +21,18 @@ notebooks/*.html
 
 # Results
 batsim/results_*/
+# models & logs
+models/*.joblib
+models/*.zip
+logs/
+# data artifacts
+data/raw/
+data/processed/
+# notebook renders
+notebooks/*.html
+models/*.joblib
+models/*.zip
+logs/
+data/raw/
+data/processed/
+notebooks/*.html

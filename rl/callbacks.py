@@ -3,7 +3,7 @@ import pandas as pd
 try:
     import pyarrow as pa
     import pyarrow.parquet as pq
-except Exception:  # allow import even without pyarrow; file will be skipped
+except Exception:
     pa = None
     pq = None
 
