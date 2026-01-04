@@ -36,3 +36,9 @@ logs/
 data/raw/
 data/processed/
 notebooks/*.html
+models/*.joblib
+models/*.zip
+logs/
+data/raw/
+data/processed/
+notebooks/*.html
